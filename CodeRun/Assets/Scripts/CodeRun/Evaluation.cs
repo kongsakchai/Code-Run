@@ -32,6 +32,9 @@ namespace CodeRun
                 case CallStatement _call:
                     EvalCallStatement(_call.name, _call.argument);
                     break;
+                case WhileStatement _while:
+                    EvalWhileStatement(_while.condition, _while.consequence);
+                    break;
             }
         }
 
@@ -55,20 +58,28 @@ namespace CodeRun
         private void EvalIfStatement(List<Token> condition, BlockStatement consequence, Statement alternative)
         {
             var _condition = Calculate(condition);
-            if (_condition != null && _condition.Is(Type.BOOLEAN))
-            {
-                if (_condition.b)
-                    EvalProgram(consequence.statements);
-                else if (alternative is null)
-                    return;
-                else if (alternative is BlockStatement _block)
-                    EvalProgram(_block.statements);
-                else if (alternative is IfStatement _if)
-                    EvalIfStatement(_if.condition, _if.consequence, _if.alternative);
-            }
-            else
-            {
+            if (_condition != null && _condition.Is(Type.BOOLEAN)) return;
 
+            if (_condition.b)
+                EvalProgram(consequence.statements);
+            else if (alternative is null)
+                return;
+            else if (alternative is BlockStatement _block)
+                EvalProgram(_block.statements);
+            else if (alternative is IfStatement _if)
+                EvalIfStatement(_if.condition, _if.consequence, _if.alternative);
+        }
+
+        private void EvalWhileStatement(List<Token> condition, BlockStatement consequence)
+        {
+            var _count = 0;
+            var _condition = Calculate(condition);
+            if (_condition == null || !_condition.Is(Type.BOOLEAN)) return;
+            while (_condition.b && _count<1000000)
+            {
+                EvalProgram(consequence.statements);
+                _condition = Calculate(condition);
+                _count++;
             }
         }
 
@@ -152,11 +163,11 @@ namespace CodeRun
                 {
                     return new Variable($"{var1.String}{var2.String}");
                 }
-                else if (type == Type.EQUAL && var1.type==var2.type)
+                else if (type == Type.EQUAL && var1.type == var2.type)
                 {
                     return new Variable(var1.s == var2.s);
                 }
-                else if (type == Type.EQUAL && var1.type==var2.type)
+                else if (type == Type.EQUAL && var1.type == var2.type)
                 {
                     return new Variable(var1.s != var2.s);
                 }

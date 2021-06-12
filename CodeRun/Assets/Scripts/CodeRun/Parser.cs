@@ -54,6 +54,7 @@ namespace CodeRun
             {
                 Type.IDENT => ParseIdentifier(),
                 Type.IF => ParseIfStatement(),
+                Type.WHILE => ParseWhileStatement(),
                 _ => null
             };
         }
@@ -103,6 +104,20 @@ namespace CodeRun
             }
 
             return new IfStatement(curToken, condition, consequence, alternative);
+        }
+
+        private WhileStatement ParseWhileStatement()
+        {
+            var token = curToken;
+            if (!ExpectPeek(Type.LPAREN)) return null;
+            var condition = ParseGroup();
+            if (condition == null) return null;
+            NextToken();
+
+            if (!ExpectPeek(Type.LBRACE)) return null;
+            var consequence = ParseBlockStatement();
+            if (consequence == null) return null;
+            return new WhileStatement(token, condition, consequence);
         }
 
         private BlockStatement ParseBlockStatement()

@@ -157,6 +157,7 @@ namespace CodeRun
         {
             return str switch
             {
+                "while"=>Type.WHILE,
                 "true" => Type.TRUE,
                 "false" => Type.FALSE,
                 "if" => Type.IF,

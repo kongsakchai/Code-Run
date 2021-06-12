@@ -47,6 +47,7 @@ namespace CodeRun
         IF,
         ELSE,
         FUNC,
+        WHILE,
 
         NULL,
         ERROR
@@ -142,6 +143,19 @@ namespace CodeRun
                     return $"{s} else {{{alternative.String}}}";
             }
         }
+    }
+
+    public class WhileStatement : Statement
+    {
+        public List<Token> condition { get; }
+        public BlockStatement consequence { get; }
+        public WhileStatement(Token token, List<Token> condition, BlockStatement consequence)
+        {
+            this.token = token;
+            this.condition = condition;
+            this.consequence = consequence;
+        }
+        public override string String => $"while {string.Join(" ", condition.Select(s => s.literal))} {{{consequence.String}}}";
     }
 
     public class CallStatement : Statement

@@ -33,8 +33,14 @@ namespace CodeRun
         {
             if (!func.ContainsKey(name) && !store.ContainsKey(name))
                 func.Add(name, action);
-            else if (!store.ContainsKey(name))
-                func[name] = action;
+        }
+
+        public void Remove(string name)
+        {
+            if (func.ContainsKey(name))
+                func.Remove(name);
+            else if (store.ContainsKey(name))
+                store.Remove(name);
         }
 
     }
