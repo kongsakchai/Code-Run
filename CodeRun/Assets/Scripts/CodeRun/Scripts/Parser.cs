@@ -1,11 +1,10 @@
-using System;
 using System.Collections.Generic;
-using UnityEngine;
 
 namespace CodeRun
 {
     public class Parser
     {
+        private enum ParserGroup {GROUP,ARRAY};
         private Lexer lexer;
         private Program program;
         private Token curToken, peekToken;
@@ -22,11 +21,15 @@ namespace CodeRun
 
             while (curToken.type != Type.EOP)
             {
+                if (curToken.type == Type.ERROR)
+                    _trace.Error(curToken.literal);
+
                 var statement = ParseStatement();
                 if (statement != null)
                 {
                     program.Add(statement);
                 }
+
                 NextToken();
             }
             return program;
@@ -70,11 +73,18 @@ namespace CodeRun
             }
             else if (ExpectPeek(Type.LPAREN))
             {
-                var argument = ParseGroup();
-                if (argument == null) return null;
+                var argument = ParseGroup(ParserGroup.ARRAY);
                 NextToken();
-                if (!ExpectPeek(Type.SEMICOLON)) return null;
+                if (!ExpectPeek(Type.SEMICOLON))
+                {
+                    _trace.Error($"'{token.literal}' missing ';'.");
+                    return null;
+                }
                 return new CallStatement(token, argument);
+            }
+            else
+            {
+                _trace.Error($"Invalid expression '{peekToken.literal}'.");
             }
             return null;
         }
@@ -83,12 +93,24 @@ namespace CodeRun
         {
             var token = curToken;
 
-            if (!ExpectPeek(Type.LPAREN)) return null;
+            if (!ExpectPeek(Type.LPAREN))
+            {
+                _trace.Error($"[if statement] Missing '('.");
+                return null;
+            }
             var condition = ParseGroup();
-            if (condition == null) return null;
+            if (condition == null)
+            {
+                if (peekToken.type == Type.RPAREN) _trace.Error($"[if statement] Invalid expression term ')'");
+                return null;
+            }
             NextToken();
 
-            if (!ExpectPeek(Type.LBRACE)) return null;
+            if (!ExpectPeek(Type.LBRACE))
+            {
+                _trace.Error($"[if statement] Missing '{{'.");
+                return null;
+            }
             var consequence = ParseBlockStatement();
             if (consequence == null) return null;
 
@@ -100,7 +122,11 @@ namespace CodeRun
                 else if (ExpectPeek(Type.IF))
                     alternative = ParseIfStatement();
 
-                if (alternative == null) return null;
+                if (alternative == null)
+                {
+                    _trace.Error($"[else statement] Missing '{{'.");
+                    return null;
+                }
             }
 
             return new IfStatement(curToken, condition, consequence, alternative);
@@ -109,12 +135,24 @@ namespace CodeRun
         private WhileStatement ParseWhileStatement()
         {
             var token = curToken;
-            if (!ExpectPeek(Type.LPAREN)) return null;
+            if (!ExpectPeek(Type.LPAREN))
+            {
+                _trace.Error($"[while statement] Missing '('.");
+                return null;
+            }
             var condition = ParseGroup();
-            if (condition == null) return null;
+            if (condition == null)
+            {
+                if (peekToken.type == Type.RPAREN) _trace.Error($"[while statement] Invalid expression term ')'");
+                return null;
+            }
             NextToken();
 
-            if (!ExpectPeek(Type.LBRACE)) return null;
+            if (!ExpectPeek(Type.LBRACE))
+            {
+                _trace.Error($"[while statement] Missing '{{'.");
+                return null;
+            }
             var consequence = ParseBlockStatement();
             if (consequence == null) return null;
             return new WhileStatement(token, condition, consequence);
@@ -131,7 +169,11 @@ namespace CodeRun
                 block.Add(statement);
                 NextToken();
             }
-            if (curToken.type != Type.RBRACE) return null;
+            if (curToken.type != Type.RBRACE)
+            {
+                _trace.Error($"Missing '}}'.");
+                return null;
+            }
 
             return block;
         }
@@ -159,7 +201,11 @@ namespace CodeRun
                     {
                         NextToken();
                         var list = ParseGroup();
-                        if (list == null) return null;
+                        if (list == null)
+                        {
+                            if (peekToken.type == Type.RPAREN) _trace.Error($"Invalid expression term ')'");
+                            return null;
+                        }
                         output.AddRange(list);
                         p2 = 9;
                     }
@@ -169,20 +215,25 @@ namespace CodeRun
                 }
                 else
                 {
+                    _trace.Error($"Invalid expression '{curToken.literal} {peekToken.literal}'.");
                     return null;
-                    //Error
                 }
             }
-            if (!ExpectPeek(Type.SEMICOLON)) return null;
+            if (!ExpectPeek(Type.SEMICOLON))
+            {
+                _trace.Error($"Misssing ';'.");
+                return null;
+            }
 
             while (stack.Count > 0)
                 output.Add(stack.Pop());
 
             if (output.Count > 0) return output;
+            _trace.Error($"Invalid expression term ';'");
             return null;
         }
 
-        private List<Token> ParseGroup()
+        private List<Token> ParseGroup(ParserGroup parser=ParserGroup.GROUP)// 0=ParseGroup 1=PasreArgument
         {
             var output = new List<Token>();
             var stack = new Stack<Token>();
@@ -192,6 +243,20 @@ namespace CodeRun
 
             while (peekToken.type != Type.RPAREN && peekToken.type != Type.EOP)
             {
+                if (parser == ParserGroup.ARRAY && peekToken.type == Type.COMMA)
+                {
+                    if (VerifyState(p1, 3))
+                    {
+                        while (stack.Count > 0)
+                            output.Add(stack.Pop());
+
+                        output.Add(peekToken);
+                        NextToken();
+                        p1 = 8;
+                        p2 = Priority(peekToken.type);
+                    }
+                }
+
                 if (VerifyState(p1, p2))
                 {
                     if (p2 == 1)
@@ -205,8 +270,12 @@ namespace CodeRun
                     else if (p2 == 8)
                     {
                         NextToken();
-                        var list = ParseGroup();
-                        if (list == null) return null;
+                        var list = ParseGroup(parser);
+                        if (list == null)
+                        {
+                            if (peekToken.type == Type.RPAREN) _trace.Error($"Invalid expression term ')'");
+                            return null;
+                        }
                         output.AddRange(list);
                     }
                     NextToken();
@@ -215,11 +284,15 @@ namespace CodeRun
                 }
                 else
                 {
+                    _trace.Error($"Invalid expression '{curToken.literal} {peekToken.literal}'.");
                     return null;
-                    //Error
                 }
             }
-            if (ExpectPeek(Type.EOP)) return null;
+            if (ExpectPeek(Type.EOP))
+            {
+                _trace.Error($"Misssing ')'.");
+                return null;
+            }
 
             while (stack.Count > 0)
                 output.Add(stack.Pop());
@@ -255,6 +328,7 @@ namespace CodeRun
                     return 5;
                 case Type.MULTIPLY:
                 case Type.DIVIDE:
+                case Type.MOD:
                     return 6;
                 case Type.NOT:
                 case Type.SIGN:
@@ -278,13 +352,13 @@ namespace CodeRun
                 case 1:
                 case 9:
                     if (p2 == 3 || p2 == 9) return true;
-                    break;
+                    return false;
                 case 2:
                 case 3:
                 case 7:
                 case 8:
                     if (p2 == 1 || p2 == 7 || p2 == 8) return true;
-                    break;
+                    return false;
                 case 0:
                     return false;
             }

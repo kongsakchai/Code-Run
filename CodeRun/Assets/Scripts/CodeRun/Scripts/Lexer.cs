@@ -1,6 +1,3 @@
-using System.Collections;
-using System.Collections.Generic;
-
 namespace CodeRun
 {
     public class Lexer
@@ -22,7 +19,7 @@ namespace CodeRun
 
         public Token NextToken()
         {
-            while (ch == ' ' || ch == '\n')
+            while (ch == ' ' || ch == '\n' || ch == '\t')
                 ReadChar();
 
             switch (ch)
@@ -42,6 +39,9 @@ namespace CodeRun
                     break;
                 case '/':
                     tok = new Token(Type.DIVIDE, "/");
+                    break;
+                case '%':
+                    tok = new Token(Type.MOD, "%");
                     break;
                 case '=':
                     if (PeekChar() == '=') { tok = new Token(Type.EQUAL, "=="); ReadChar(); }
@@ -81,6 +81,9 @@ namespace CodeRun
                     break;
                 case '}':
                     tok = new Token(Type.RBRACE, "}");
+                    break;
+                case ',':
+                    tok = new Token(Type.COMMA, ",");
                     break;
                 case '"':
                     tok = ReadString();
@@ -157,7 +160,7 @@ namespace CodeRun
         {
             return str switch
             {
-                "while"=>Type.WHILE,
+                "while" => Type.WHILE,
                 "true" => Type.TRUE,
                 "false" => Type.FALSE,
                 "if" => Type.IF,
@@ -187,6 +190,7 @@ namespace CodeRun
                 case Type.MULTIPLY:
                 case Type.DIVIDE:
                 case Type.LPAREN:
+                case Type.COMMA:
                     return true;
                 default:
                     return false;

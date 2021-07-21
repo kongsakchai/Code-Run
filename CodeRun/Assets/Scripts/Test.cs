@@ -6,24 +6,23 @@ using CodeRun;
 
 public class Test : MonoBehaviour
 {
-    [SerializeField] InputField input;
-    [SerializeField] Text boardText;
+    [SerializeField] CodeComponent code;
+    [SerializeField] InputField inputText;
 
-    CodeComponent code;
-
-    public void Start()
+    void Start()
     {
-        code = new CodeComponent();
-        code.Add("board", PrintToBoard);
+
     }
 
-    public void Click()
+
+    void Update()
     {
-        code.Compiler(input.text);
     }
 
-    public void PrintToBoard(Variable var)
+    public void RunCode()
     {
-        boardText.text = $"{boardText.text}\n{var.String}";
+        //if(code.active)return;
+        code.Compiler(inputText.text);
     }
+
 }

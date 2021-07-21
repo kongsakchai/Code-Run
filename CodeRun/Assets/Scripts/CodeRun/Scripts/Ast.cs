@@ -13,10 +13,13 @@ namespace CodeRun
         NUMBER,
         STRING,
         BOOLEAN,
+        ARRAY,
+        OBJECT,
         IDENT,
 
         // Operator
         ASSIGN, // =
+        MOD, // %
         PLUS, // +
         MINUS, // -
         MULTIPLY, // *
@@ -40,6 +43,7 @@ namespace CodeRun
         RPAREN, // )
         LBRACE, // {
         RBRACE, // }
+        COMMA, // ,
 
         // Keywords
         TRUE,
@@ -99,6 +103,11 @@ namespace CodeRun
         {
             this.token = token;
             statements = new List<Statement>();
+        }
+        public BlockStatement(List<Statement> statements)
+        {
+            this.token = new Token(Type.LBRACE,"{");
+            this.statements = statements;
         }
         public void Add(Statement item)
         {
