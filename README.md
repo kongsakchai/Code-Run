@@ -45,6 +45,7 @@ call functin
 ```
 a=10;
 print(a); // 10
+move(1,3);
 ```
 ## Resources
 - [Monkey-CSharp](https://github.com/ronnieholm/Monkey-CSharp) by [Ronnie Holm](https://github.com/ronnieholm)
