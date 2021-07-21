@@ -9,7 +9,7 @@ Features
 - while
 - call function
 
-##Example
+## Example
 variabl
 ```
 a=100; //integers(double)
