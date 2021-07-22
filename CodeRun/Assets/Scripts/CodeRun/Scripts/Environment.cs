@@ -5,77 +5,91 @@ namespace CodeRun
 {
     using Store = Dictionary<string, CodeObject>;
     using Function = Dictionary<string, Action<CodeObject>>;
-    public enum EnvironmentStatus { Root }
+    public enum EnvironmentStatus { ReadOnly }
 
     public class Environment
     {
-        public Store root;
+        public Store readOnly;
         public Store store;
         public Function func;
 
         public Environment()
         {
-            root = new Store();
+            readOnly = new Store();
             store = new Store();
             func = new Function();
         }
 
         //---------- Add ----------
 
-        public void Add(string name, CodeObject var)
+        public void Add(string name, CodeObject obj)
         {
-            if (!store.ContainsKey(name) && !func.ContainsKey(name) && !root.ContainsKey(name))
-                store.Add(name, var);
-            else if (!func.ContainsKey(name) && !root.ContainsKey(name))
-                store[name] = var;
+            if (func.ContainsKey(name) || readOnly.ContainsKey(name)) return;
+
+            if (!store.TryGetValue(name, out var _obj))
+                store.Add(name, obj);
+            else if (obj.type == _obj.type)
+                store[name] = obj;
+            else
+                _trace.Error($"Can't convert {obj.typeName} to {_obj.typeName}.");
         }
 
-        public void Add(string name, CodeObject var, EnvironmentStatus status)
+        public void Add(string name, CodeObject obj, EnvironmentStatus status)
         {
-            if (status != EnvironmentStatus.Root) return;
-            if (!store.ContainsKey(name) && !func.ContainsKey(name) && !root.ContainsKey(name))
-                root.Add(name, var);
-            else if (!store.ContainsKey(name) && !func.ContainsKey(name))
-                root[name] = var;
+            if (status != EnvironmentStatus.ReadOnly) return;
+            if (store.ContainsKey(name) || func.ContainsKey(name)) return;
+
+            if (!readOnly.TryGetValue(name, out var _obj))
+                readOnly.Add(name, obj);
+            else if (obj.type == _obj.type)
+                readOnly[name] = obj;
+            else
+                _trace.Error($"Can't convert {obj.typeName} to {_obj.typeName}.");
         }
 
         public void Add(string name, Action<CodeObject> action)
         {
-            if (!store.ContainsKey(name) && !func.ContainsKey(name) && !root.ContainsKey(name))
-                func.Add(name, action);
-        }
+            if (store.ContainsKey(name) || func.ContainsKey(name) || readOnly.ContainsKey(name)) return;
 
-        //---------- Set ----------
-
-        public void Set(string name, CodeObject var)
-        {
-            if (store.ContainsKey(name))
-                store[name] = var;
-        }
-
-        public void Set(string name, CodeObject var, EnvironmentStatus status)
-        {
-            if (status != EnvironmentStatus.Root) return;
-            if (root.ContainsKey(name))
-                root[name] = var;
+            func.Add(name, action);
         }
 
         //---------- Get ----------
 
-        public bool GetStore(string name, out CodeObject var)
+        public bool GetStore(string name, out CodeObject obj)
         {
+            obj = null;
+
             if (store.ContainsKey(name))
-            {
-                var = store[name];
-                return true;
-            }
-            if (root.ContainsKey(name))
-            {
-                var = root[name];
-                return true;
-            }
-            var = null;
-            return false;
+                obj = store[name];
+            else if (readOnly.ContainsKey(name))
+                obj = readOnly[name];
+            else
+                return false;
+
+            return true;
+        }
+
+        //---------- Set ----------
+
+        public void Set(string name, CodeObject obj)
+        {
+            if (!store.TryGetValue(name, out var _obj))
+                if (obj.type == _obj.type)
+                    store[name] = obj;
+                else
+                    _trace.Error($"Can't convert {obj.typeName} to {_obj.typeName}.");
+        }
+
+        public void Set(string name, CodeObject obj, EnvironmentStatus status)
+        {
+            if (status != EnvironmentStatus.ReadOnly) return;
+
+            if (readOnly.TryGetValue(name, out var _obj))
+                if (obj.type == _obj.type)
+                    readOnly[name] = obj;
+                else
+                    _trace.Error($"Can't convert {obj.typeName} to {_obj.typeName}.");
         }
 
         public void Remove(string name)
@@ -84,13 +98,20 @@ namespace CodeRun
                 func.Remove(name);
             else if (store.ContainsKey(name))
                 store.Remove(name);
-            else if (root.ContainsKey(name))
-                root.Remove(name);
+            else if (readOnly.ContainsKey(name))
+                readOnly.Remove(name);
         }
 
         public void ClearStore()
         {
             store.Clear();
+        }
+
+        public void ClearStore(EnvironmentStatus status)
+        {
+            if (status != EnvironmentStatus.ReadOnly) return;
+            store.Clear();
+            readOnly.Clear();
         }
 
     }

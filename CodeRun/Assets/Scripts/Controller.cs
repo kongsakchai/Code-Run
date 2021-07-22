@@ -13,7 +13,6 @@ public class Controller : MonoBehaviour
 
     public IEnumerator Move(CodeObject obj)
     {
-        Debug.Log(obj.Count);
         if (obj.Count != 2) yield break;
         code.Pause();
         var i = 0;

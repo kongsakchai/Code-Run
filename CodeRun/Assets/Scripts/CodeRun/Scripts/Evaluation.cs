@@ -5,14 +5,15 @@ namespace CodeRun
 {
     public class Evaluation
     {
-        public bool finish;
-        public bool active;
         private Environment env;
         private bool pause;
         private Stack<int> position;
         private List<Statement> statements;
 
-        public void Pause() { pause = true; }
+        public void Pause()
+        {
+            pause = true;
+        }
 
         public void Play()
         {
@@ -25,8 +26,6 @@ namespace CodeRun
         {
             this.env = env;
             pause = false;
-            finish = false;
-            active = false;
             position = new Stack<int>();
         }
 
@@ -36,8 +35,6 @@ namespace CodeRun
             {
                 case Program _p:
                     pause = false;
-                    finish = false;
-                    active = true;
                     position.Clear();
                     statements = _p.statements;
                     EvalProgram(_p.statements);
@@ -69,7 +66,6 @@ namespace CodeRun
                 Eval(statements[i]);
                 if (_trace.error)
                 {
-                    active = false;
                     return;
                 }
                 if (!pause) i++;
@@ -89,14 +85,12 @@ namespace CodeRun
             else
                 position.Push(i + 1);
 
-            //if(true){move(1);move(-1);move(1);move(-1);}else if(true){move(2);move(-2);}
-            //i=0;while(i<5){move(1);move(-1);i=i+1;}
         }
 
         private void EvalAssign(string name, List<Token> value)
         {
             var _value = Calculate(value);
-            if (_value is null) return;
+            if (_value == null) return;
             env.Add(name, _value);
         }
 
@@ -131,7 +125,7 @@ namespace CodeRun
 
             if (_condition.b)
                 EvalProgram(consequence.statements);
-            else if (alternative is null)
+            else if (alternative == null)
                 return;
             else if (alternative is BlockStatement _block)
                 EvalProgram(_block.statements);
