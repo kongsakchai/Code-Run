@@ -27,10 +27,13 @@ namespace CodeRun
 
             lexer.Read(source);
             var program = parser.ParseProgram();
-            if (!_trace.error) evaluation.Eval(program);
+            if (!_trace.error)
+                evaluation.Eval(program);
+            else
+                _trace.Log();
         }
 
-        public void Pause() => evaluation.Pause();
+        public void Stop() => evaluation.Stop();
         public void Play() => evaluation.Play();
 
         public void Add(string name, CodeObject var) => env.Add(name, var);
@@ -53,7 +56,11 @@ namespace CodeRun
         public static void Error(string _message)
         {
             _error = _message;
-            Debug.Log(_message);
+        }
+
+        public static void Log()
+        {
+            Debug.Log(_error);
         }
     }
 

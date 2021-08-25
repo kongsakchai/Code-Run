@@ -22,7 +22,7 @@ namespace CodeRun
                 return;
             }
 
-            code.Pause();
+            code.Stop();
             var milli = 1000*var.n;
             await Task.Delay((int)milli);
             code.Play();

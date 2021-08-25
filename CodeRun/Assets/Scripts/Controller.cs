@@ -8,22 +8,40 @@ public class Controller : MonoBehaviour
     [SerializeField] CodeComponent code;
     void Start()
     {
-        code.Add("move", (CodeObject var) => StartCoroutine(Move(var)));
+        code.Add("Move", (CodeObject var) => StartCoroutine(Move(var)));
+        code.Add("L", L);
+        code.Add("R", R);
     }
 
     public IEnumerator Move(CodeObject obj)
     {
-        if (obj.Count != 2) yield break;
-        code.Pause();
+        if (obj==null || !obj.IsNumber) yield break;
+        code.Stop();
         var i = 0;
-        var x = (float)obj[0].n / 60;
-        var y = (float)obj[1].n / 60;
+        var x = (float)obj.n / 60;
         while (i < 60)
         {
             i++;
-            transform.position = (Vector2)transform.position + new Vector2(x,y);
+            transform.position = (Vector2)transform.position + (Vector2)transform.up * x;
             yield return null;
         }
         code.Play();
     }
+
+    public void L(CodeObject obj)
+    {
+        if (obj != null) return;
+        code.Stop();
+        transform.Rotate(0,0,90);
+        code.Play();
+    }
+
+    public void R(CodeObject obj)
+    {
+        if (obj != null) return;
+        code.Stop();
+        transform.Rotate(0,0,-90);
+        code.Play();
+    }
+
 }

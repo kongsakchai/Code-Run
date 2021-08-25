@@ -5,28 +5,40 @@ namespace CodeRun
 {
     public class Evaluation
     {
+        public bool end { private set; get; }
         private Environment env;
-        private bool pause;
+        private bool stop;
         private Stack<int> position;
+        private Stack<bool> cond;
         private List<Statement> statements;
+        private bool next = false;
 
-        public void Pause()
+        public void Stop()
         {
-            pause = true;
+            stop = true;
         }
 
         public void Play()
         {
-            pause = false;
-            var i = (position.Count > 0) ? position.Pop() : 0;
-            EvalProgram(statements, i);
+            if (_trace.error)
+            {
+                _trace.Log();
+                return;
+            }
+            stop = false;
+            if (position.Count > 0)
+            {
+                var i = position.Pop();
+                EvalProgram(statements, i);
+            }
         }
 
         public Evaluation(Environment env)
         {
             this.env = env;
-            pause = false;
+            stop = false;
             position = new Stack<int>();
+            cond = new Stack<bool>();
         }
 
         public void Eval(INode node)
@@ -34,8 +46,9 @@ namespace CodeRun
             switch (node)
             {
                 case Program _p:
-                    pause = false;
+                    stop = false;
                     position.Clear();
+                    cond.Clear();
                     statements = _p.statements;
                     EvalProgram(_p.statements);
                     break;
@@ -61,30 +74,24 @@ namespace CodeRun
         {
             var count = statements.Count;
             var i = start;
-            while (i < count && !pause)
+            while (i < count && !stop)
             {
                 Eval(statements[i]);
                 if (_trace.error)
                 {
+                    _trace.Log();
                     return;
                 }
-                if (!pause) i++;
+                if (!stop) i++;
             }
 
-            if (i == count)
-            {
+            if (i >= count)
                 return;
-            }
 
-            if (position.Count > 0 && position.Peek() < 0)
-            {
-                position.Pop();
-                position.Push(i);
-                return;
-            }
-            else
+            if (next)
                 position.Push(i + 1);
-
+            else
+                position.Push(i);
         }
 
         private void EvalAssign(string name, List<Token> value)
@@ -92,25 +99,26 @@ namespace CodeRun
             var _value = Calculate(value);
             if (_value == null) return;
             env.Add(name, _value);
+            next = true;
         }
 
         private void EvalIfStatement(List<Token> condition, BlockStatement consequence, Statement alternative)
         {
-            if (position.Count > 0)
+            if (cond.Count > 0)
             {
+                var b = cond.Pop();
                 var p = position.Pop();
-                if (p != -1)
+                if (b)
                     EvalProgram(consequence.statements, p);
                 else if (alternative is BlockStatement _block)
                     EvalProgram(_block.statements, position.Pop());
                 else if (alternative is IfStatement _if)
                     EvalIfStatement(_if.condition, _if.consequence, _if.alternative);
 
-                if (pause)
+                if (stop)
                 {
-                    if (p == -1 && alternative is IfStatement) position.Pop();
-                    if (p == -1) position.Push(-1);
-                    position.Push(-1);
+                    cond.Push(b);
+                    next = false;
                 }
                 return;
             }
@@ -132,11 +140,10 @@ namespace CodeRun
             else if (alternative is IfStatement _if)
                 EvalIfStatement(_if.condition, _if.consequence, _if.alternative);
 
-            if (pause)
+            if (stop)
             {
-                if (!_condition.b && alternative is IfStatement) position.Pop();
-                if (!_condition.b) position.Push(-1);
-                position.Push(-1);
+                cond.Push(_condition.b);
+                next = false;
             }
         }
 
@@ -145,9 +152,9 @@ namespace CodeRun
             if (position.Count > 0)
                 EvalProgram(consequence.statements, position.Pop());
 
-            if (pause)
+            if (stop)
             {
-                position.Push(-1);
+                next = false;
                 return;
             }
 
@@ -163,9 +170,9 @@ namespace CodeRun
             while (_condition.b && _count < 1000)
             {
                 EvalProgram(consequence.statements);
-                if (pause)
+                if (stop)
                 {
-                    position.Push(-1);
+                    next = false;
                     return;
                 }
                 _condition = Calculate(condition);
@@ -183,6 +190,7 @@ namespace CodeRun
             }
             var _argument = Calculate(argument);
             func(_argument);
+            next = true;
         }
 
         private CodeObject Calculate(List<Token> value)
@@ -321,15 +329,9 @@ namespace CodeRun
         private CodeObject CalculatePrefix(Type opr, CodeObject var)
         {
             if (opr == Type.NOT && var.IsBoolean)
-            {
-                var.Set(!var.b);
-                return var;
-            }
+                return new CodeObject(!var.b);
             else if (opr == Type.SIGN && var.IsNumber)
-            {
-                var.Set(-var.n);
-                return var;
-            }
+                return new CodeObject(-var.n);
             else
                 _trace.Error($"Can't {operatorSymbol(opr)} {var.typeName}.");
             return null;

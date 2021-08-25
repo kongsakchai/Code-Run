@@ -77,7 +77,7 @@ namespace CodeRun
                 NextToken();
                 if (!ExpectPeek(Type.SEMICOLON))
                 {
-                    _trace.Error($"'{token.literal}' missing ';'.");
+                    if(curToken.type!=Type.SEMICOLON)_trace.Error($"'{token.literal}' missing ';'.");
                     return null;
                 }
                 return new CallStatement(token, argument);
@@ -284,7 +284,7 @@ namespace CodeRun
                 }
                 else
                 {
-                    _trace.Error($"Invalid expression '{curToken.literal} {peekToken.literal}'.");
+                    _trace.Error($"Invalid expression '{curToken.literal}' '{peekToken.literal}'.");
                     return null;
                 }
             }

@@ -97,11 +97,12 @@ namespace CodeRun
             Add(new CodeObject(b));
         }
 
-        //---------- What is ...
+        //---------- Check is ...
 
         public bool IsNumber => type == Type.NUMBER;
         public bool IsString => type == Type.STRING;
         public bool IsBoolean => type == Type.BOOLEAN;
+        public bool IsArray => type == Type.ARRAY;
 
         public string String => type switch
         {
