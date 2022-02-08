@@ -1,57 +1,53 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 
 namespace CodeRun
 {
-    using Store = Dictionary<string, CodeObject>;
-    using Function = Dictionary<string, Action<CodeObject>>;
-    public enum EnvironmentStatus { ReadOnly }
+    using Store = Dictionary<string, StructStore>;
+    using Function = Dictionary<string, Action<CodeObject, Action>>;
+    public enum Permission { ReadWrite, ReadOnly }
 
     public class Environment
     {
-        public Store readOnly;
-        public Store store;
-        public Function func;
+        public Store stores;
+        public Function funcs;
 
         public Environment()
         {
-            readOnly = new Store();
-            store = new Store();
-            func = new Function();
+            stores = new Store();
+            funcs = new Function();
         }
 
-        //---------- Add ----------
+        public bool IsReadOnly(string name)
+        {
+            return stores[name].IsReadOnly();
+        }
+
+        public bool HasName(string name)
+        {
+            return stores.ContainsKey(name) || funcs.ContainsKey(name);
+        }
 
         public void Add(string name, CodeObject obj)
         {
-            if (func.ContainsKey(name) || readOnly.ContainsKey(name)) return;
-
-            if (!store.TryGetValue(name, out var _obj))
-                store.Add(name, obj);
-            else if (obj.type == _obj.type)
-                store[name] = obj;
-            else
-                _trace.Error($"Can't convert {obj.typeName} to {_obj.typeName}.");
+            var ok = HasName(name);
+            if (!ok)
+                this.stores.Add(name, new StructStore(obj));
         }
 
-        public void Add(string name, CodeObject obj, EnvironmentStatus status)
+        public void Add(string name, CodeObject obj, Permission permission)
         {
-            if (status != EnvironmentStatus.ReadOnly) return;
-            if (store.ContainsKey(name) || func.ContainsKey(name)) return;
-
-            if (!readOnly.TryGetValue(name, out var _obj))
-                readOnly.Add(name, obj);
-            else if (obj.type == _obj.type)
-                readOnly[name] = obj;
-            else
-                _trace.Error($"Can't convert {obj.typeName} to {_obj.typeName}.");
+            var ok = HasName(name);
+            if (!ok)
+                this.stores.Add(name, new StructStore(permission, obj));
         }
 
-        public void Add(string name, Action<CodeObject> action)
+        public void Add(string name, Action<CodeObject, Action> action)
         {
-            if (store.ContainsKey(name) || func.ContainsKey(name) || readOnly.ContainsKey(name)) return;
-
-            func.Add(name, action);
+            var ok = HasName(name);
+            if (!ok)
+                funcs.Add(name, action);
         }
 
         //---------- Get ----------
@@ -60,10 +56,20 @@ namespace CodeRun
         {
             obj = null;
 
-            if (store.ContainsKey(name))
-                obj = store[name];
-            else if (readOnly.ContainsKey(name))
-                obj = readOnly[name];
+            if (stores.ContainsKey(name))
+                obj = stores[name].obj;
+            else
+                return false;
+
+            return true;
+        }
+
+        public bool GetFunction(string name, out Action<CodeObject, Action> obj)
+        {
+            obj = null;
+
+            if (funcs.ContainsKey(name))
+                obj = funcs[name];
             else
                 return false;
 
@@ -71,48 +77,63 @@ namespace CodeRun
         }
 
         //---------- Set ----------
-
         public void Set(string name, CodeObject obj)
         {
-            if (!store.TryGetValue(name, out var _obj))
-                if (obj.type == _obj.type)
-                    store[name] = obj;
-                else
-                    _trace.Error($"Can't convert {obj.typeName} to {_obj.typeName}.");
+            var ok = this.stores.TryGetValue(name, out var store);
+
+            if (!ok)
+                _tracer.Error(Code.Unknow, name);
+            else if (!store.Type(obj.type))
+                _tracer.Error(Code.Variable, $"{obj.typeName}?{store.obj.typeName}");
+            else
+                store.obj = obj;
         }
 
-        public void Set(string name, CodeObject obj, EnvironmentStatus status)
+        public void Set(string name, CodeObject obj, int index)
         {
-            if (status != EnvironmentStatus.ReadOnly) return;
+            var ok = this.stores.TryGetValue(name, out var store);
 
-            if (readOnly.TryGetValue(name, out var _obj))
-                if (obj.type == _obj.type)
-                    readOnly[name] = obj;
-                else
-                    _trace.Error($"Can't convert {obj.typeName} to {_obj.typeName}.");
+            if (!ok)
+                _tracer.Error(Code.Unknow, name);
+            else if (!store.Type(Type.ARRAY))
+                _tracer.Error(Code.Variable, $"{store.obj.typeName}?Array");
+            else if (index >= store.obj.Count)
+                _tracer.Error(Code.OutofArray);
+            else if (store.obj[index].type != obj.type)
+                _tracer.Error(Code.Variable, $"{obj.typeName}?{store.obj[index].typeName}");
+            else
+                store.obj[index] = obj;
         }
 
+
+        //-------- Delete --------
         public void Remove(string name)
         {
-            if (func.ContainsKey(name))
-                func.Remove(name);
-            else if (store.ContainsKey(name))
-                store.Remove(name);
-            else if (readOnly.ContainsKey(name))
-                readOnly.Remove(name);
+            if (funcs.ContainsKey(name))
+                funcs.Remove(name);
+            else if (stores.ContainsKey(name))
+                stores.Remove(name);
         }
 
         public void ClearStore()
         {
-            store.Clear();
+            stores.Clear();
         }
 
-        public void ClearStore(EnvironmentStatus status)
-        {
-            if (status != EnvironmentStatus.ReadOnly) return;
-            store.Clear();
-            readOnly.Clear();
-        }
+    }
+
+    public class StructStore
+    {
+        //public int layer;
+        public Permission permission;
+        public CodeObject obj;
+
+        //public StructStore(int layer, Permission permission, CodeObject obj) => (this.layer, this.permission, this.obj) = (layer, permission, obj);
+        public StructStore(Permission permission, CodeObject obj) => (this.permission, this.obj) = (permission, obj);
+        public StructStore(CodeObject obj) => (this.permission, this.obj) = (Permission.ReadWrite, obj);
+
+        public bool IsReadOnly() => permission == Permission.ReadOnly;
+        public bool Type(Type type) => obj.type == type;
 
     }
 }

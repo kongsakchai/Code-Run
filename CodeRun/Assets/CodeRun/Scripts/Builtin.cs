@@ -1,6 +1,5 @@
 using UnityEngine;
-using System.Threading.Tasks;
-
+using System;
 namespace CodeRun
 {
     public class Builtin
@@ -10,22 +9,11 @@ namespace CodeRun
         {
             this.code = code;
             env.Add("print", Print);
-            env.Add("delay", Delay);
         }
 
-        public void Print(CodeObject var) => Debug.Log(var.String);
-
-        public async void Delay(CodeObject var)
-        {
-            if (!var.IsNumber)
-            {
-                return;
-            }
-
-            code.Stop();
-            var milli = 1000*var.n;
-            await Task.Delay((int)milli);
-            code.Play();
+        public void Print(CodeObject var,Action next){
+            Debug.Log(var.String);
+            next();
         }
     }
 }

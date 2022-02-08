@@ -2,30 +2,44 @@ namespace CodeRun
 {
     public class Lexer
     {
-        private string code;
+        private string source;
         private char ch;
-        private int readPos, index;
+        private int readPos, index, countSpace;
         private Token tok;
 
         public Lexer() { }
 
         public void Read(string source)
         {
-            code = source;
+            this.source = source;
             readPos = 0;
+            countSpace = 0;
             tok = new Token(Type.NULL, "");
             ReadChar();
         }
 
         public Token NextToken()
         {
-            while (ch == ' ' || ch == '\n' || ch == '\t')
-                ReadChar();
+
+            //4 space is 1 tab
+            countSpace = 0;
+            while(ch=='\r')ReadChar();
+            while (ch == ' ')
+            {
+                countSpace += 1;
+                if (countSpace == 4)
+                    ch = '\t';
+                else
+                    ReadChar();
+            }
 
             switch (ch)
             {
                 case '\0':
-                    tok = new Token(Type.EOP, "\0");
+                    tok = new Token(Type.EOP, "End of program");
+                    break;
+                case '\n':
+                    tok = new Token(Type.EOL, "End of line");
                     break;
                 case '+':
                     tok = new Token(Type.PLUS, "+");
@@ -64,8 +78,14 @@ namespace CodeRun
                     else tok = new Token(Type.ERROR, "&");
                     break;
                 case '|':
-                    if (PeekChar() == '|') tok = new Token(Type.OR, "||");
+                    if (PeekChar() == '|') { tok = new Token(Type.OR, "||"); ReadChar(); }
                     else tok = new Token(Type.ERROR, "|");
+                    break;
+                case '\t':
+                    tok = new Token(Type.TAB, "Tab");
+                    break;
+                case ':':
+                    tok = new Token(Type.COLON, ":");
                     break;
                 case ';':
                     tok = new Token(Type.SEMICOLON, ";");
@@ -76,11 +96,11 @@ namespace CodeRun
                 case ')':
                     tok = new Token(Type.RPAREN, ")");
                     break;
-                case '{':
-                    tok = new Token(Type.LBRACE, "{");
+                case '[':
+                    tok = new Token(Type.LBRACKET, "[");
                     break;
-                case '}':
-                    tok = new Token(Type.RBRACE, "}");
+                case ']':
+                    tok = new Token(Type.RBRACKET, "]");
                     break;
                 case ',':
                     tok = new Token(Type.COMMA, ",");
@@ -112,9 +132,9 @@ namespace CodeRun
 
         private void ReadChar()
         {
-            if (readPos < code.Length)
+            if (readPos < source.Length)
             {
-                ch = code[readPos];
+                ch = source[readPos];
                 index = readPos;
                 readPos++;
             }
@@ -125,14 +145,14 @@ namespace CodeRun
             }
         }
 
-        private char PeekChar() => readPos < code.Length ? code[readPos] : '\0';
+        private char PeekChar() => readPos < source.Length ? source[readPos] : '\0';
 
         private string ReadIdentifier()
         {
             int i = index;
             while (IsLetter(ch) || IsNumber(ch))
                 ReadChar();
-            return code.Substring(i, index - i);
+            return source.Substring(i, index - i);
         }
 
         private string ReadNumber()
@@ -140,7 +160,7 @@ namespace CodeRun
             int i = index;
             while (IsNumber(ch) || ch == '.' && IsNumber(PeekChar()))
                 ReadChar();
-            return code.Substring(i, index - i);
+            return source.Substring(i, index - i);
         }
 
         private Token ReadString()
@@ -149,9 +169,9 @@ namespace CodeRun
             do
             {
                 ReadChar();
-            } while (ch != '"' && readPos < code.Length);
-            if (readPos < code.Length)
-                return new Token(Type.STRING, code.Substring(i, index - i));
+            } while (ch != '"' && readPos < source.Length);
+            if (ch == '"')
+                return new Token(Type.STRING, source.Substring(i, index - i));
             else
                 return new Token(Type.ERROR, $"Missing '\"'.");
         }
@@ -160,11 +180,12 @@ namespace CodeRun
         {
             return str switch
             {
-                "while" => Type.WHILE,
+                "loop" => Type.LOOP,
                 "true" => Type.TRUE,
                 "false" => Type.FALSE,
                 "if" => Type.IF,
                 "else" => Type.ELSE,
+                //"let"=>Type.LET,
                 _ => Type.IDENT,
             };
         }

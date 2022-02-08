@@ -7,7 +7,7 @@ namespace CodeRun
     public class CodeComponent : MonoBehaviour
     {
         private Environment env;
-        private Evaluation evaluation;
+        private Evaluator evaluation;
         private Lexer lexer;
         private Parser parser;
         private Builtin builtin;
@@ -16,52 +16,66 @@ namespace CodeRun
             lexer = new Lexer();
             parser = new Parser(lexer);
             env = new Environment();
-            evaluation = new Evaluation(env);
+            evaluation = new Evaluator(env);
             builtin = new Builtin(env, this);
         }
 
         public void Compiler(string source)
         {
-            _trace.Clear();
+            _tracer.Clear();
             env.ClearStore();
 
             lexer.Read(source);
             var program = parser.ParseProgram();
-            if (!_trace.error)
+            if (!_tracer.error)
                 evaluation.Eval(program);
-            else
-                _trace.Log();
+
+            if(_tracer.error)Debug.Log($"{_tracer.code} {_tracer.GetLog()}");
         }
-
-        public void Stop() => evaluation.Stop();
-        public void Play() => evaluation.Play();
-
-        public void Add(string name, CodeObject var) => env.Add(name, var);
-        public void Add(string name, CodeObject var, EnvironmentStatus status) => env.Add(name, var, status);
-        public void Add(string name, Action<CodeObject> func) => env.Add(name, func);
+        public void Add(string name, CodeObject var, int layer) => env.Add(name, var);
+        public void Add(string name, CodeObject var, int layer, Permission per) => env.Add(name, var, per);
+        public void Add(string name, Action<CodeObject, Action> func) => env.Add(name, func);
         public void GetStore(string name, out CodeObject var) => env.GetStore(name, out var);
     }
-
-    public class _trace
+    public enum Code { Null, Missing, Invalid, MissingBlock, Unknow, Variable, ReadOnly, OutofArray }
+    public class _tracer
     {
-        private static string _error = "";
-        public static bool error => _error != "";
+        private static List<string> trace = new List<string>(0);
+        private static string log = "";
+        public static bool error => log != "" || code != Code.Null;
+        public static Code code = Code.Null;
+        public static void Trace(string message)
+        {
+            trace.Add(message);
+        }
+        public static void UnTrace()
+        {
+            trace.RemoveAt(trace.Count - 1);
+        }
+        public static void Error(Code _code)
+        {
+            if (code == Code.Null)
+                code = _code;
+        }
+
+        public static void Error(Code _code, string message)
+        {
+            if (code == Code.Null || code == _code && log == "")
+            {
+                code = _code;
+                log = message;
+            }
+        }
 
         public static void Clear()
         {
-            if (_error == null) return;
-            _error = "";
+            trace.Clear();
+            log = "";
+            code = Code.Null;
         }
 
-        public static void Error(string _message)
-        {
-            _error = _message;
-        }
-
-        public static void Log()
-        {
-            Debug.Log(_error);
-        }
+        public static string GetTrace() => trace[trace.Count - 1];
+        public static string GetLog() => log;
     }
 
 }

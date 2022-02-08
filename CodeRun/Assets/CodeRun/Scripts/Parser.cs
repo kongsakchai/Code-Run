@@ -1,13 +1,15 @@
 using System.Collections.Generic;
+using UnityEngine;
 
 namespace CodeRun
 {
     public class Parser
     {
-        private enum ParserGroup {GROUP,ARRAY};
+        private enum ParserType { GROUP, ARRAY, Linear };
         private Lexer lexer;
         private Program program;
         private Token curToken, peekToken;
+        private int countTab, layer;
         public Parser(Lexer lexer)
         {
             this.lexer = lexer;
@@ -22,14 +24,16 @@ namespace CodeRun
             while (curToken.type != Type.EOP)
             {
                 if (curToken.type == Type.ERROR)
-                    _trace.Error(curToken.literal);
-
-                var statement = ParseStatement();
-                if (statement != null)
                 {
-                    program.Add(statement);
+                    _tracer.Error(Code.Invalid, curToken.literal);
+                    return null;
                 }
-
+                layer = countTab = 0;
+                var statement = ParseStatement();
+                if (statement != null) program.Add(statement);
+                
+                if (countTab != 0) _tracer.Error(Code.Invalid,"Tab");
+                if (_tracer.error) return null;
                 NextToken();
             }
             return program;
@@ -57,248 +61,309 @@ namespace CodeRun
             {
                 Type.IDENT => ParseIdentifier(),
                 Type.IF => ParseIfStatement(),
-                Type.WHILE => ParseWhileStatement(),
-                _ => null
+                Type.LOOP => ParseLoopStatement(),
+                _ => ParseNull()
             };
+        }
+
+        private Statement ParseNull()
+        {
+            switch (curToken.type)
+            {
+                case Type.EOL:
+                case Type.SEMICOLON:
+                case Type.EOP:
+                    return null;
+                default:
+                    _tracer.Error(Code.Invalid,$"{peekToken.literal}");
+                    return null;
+            }
         }
 
         private Statement ParseIdentifier()
         {
-            var token = curToken;
-            if (ExpectPeek(Type.ASSIGN))
+            switch (peekToken.type)
             {
-                var value = ParseValue();
-                if (value == null) return null;
-                return new AssignStatement(token, value);
+                case Type.ASSIGN:
+                    return ParseAssignStatement();
+                case Type.LBRACKET:
+                    return ParseAssignStatement_Index();
+                case Type.LPAREN:
+                    return ParseCallStatement();
+                default:
+                    _tracer.Error(Code.Invalid,$"{peekToken.literal}");
+                    return null;
             }
-            else if (ExpectPeek(Type.LPAREN))
+        }
+
+        private AssignStatement ParseAssignStatement()
+        {
+            _tracer.Trace(curToken.literal);
+            var token = curToken;//curToken is iden;
+            NextToken();// curToken is '='
+
+            NodeExpression value;
+            if (ExpectPeek(Type.LBRACKET))
+                value = PasreArray();
+            else
+                value = ParseExpression();
+
+            if (_tracer.error) return null;
+            NextToken();//CurToken is end
+            _tracer.UnTrace();
+            return new AssignStatement(token, value);
+        }
+
+        private AssignStatement ParseAssignStatement_Index()
+        {
+            _tracer.Trace(curToken.literal);
+            var token = curToken;
+            NextToken();
+            var index = ParseExpression(Type.RBRACKET);
+
+            if (!ExpectPeek(Type.RBRACKET))
+                _tracer.Error(Code.Missing,"]");
+            if (!ExpectPeek(Type.ASSIGN))
+                _tracer.Error(Code.Invalid,$"{curToken.literal}?{peekToken.literal}");
+
+            if (_tracer.error) return null;
+
+
+            NodeExpression value;
+            var array = ExpectPeek(Type.LBRACKET);
+            if (array)
+                value = PasreArray();
+            else
+                value = ParseExpression();
+
+            if (array && !ExpectPeek(Type.RBRACKET)) _tracer.Error(Code.Missing,"]");
+            if (_tracer.error) return null;
+
+            NextToken();//CurToken is end
+            _tracer.UnTrace();
+            return new AssignStatement(token, value, index);
+        }
+
+        private CallStatement ParseCallStatement()
+        {
+            _tracer.Trace(curToken.literal);
+            var token = curToken;
+            NextToken();//curToken = '('
+
+            var argument = (ExpectPeek(Type.RPAREN)) ? null : PasreArray(Type.RPAREN);
+
+            if (curToken.type != Type.RPAREN)
+                _tracer.Error(Code.Missing, ")");
+
+            if (!ExpectPeek(Type.SEMICOLON) && !ExpectPeek(Type.EOL) && !ExpectPeek(Type.EOP))
+                _tracer.Error(Code.Invalid, $"{curToken.literal}?{peekToken.literal}");
+
+            if (_tracer.error) return null;
+            //CurToken is end
+            _tracer.UnTrace();
+            return new CallStatement(token, argument);
+        }
+
+        private BlockStatement ParseBlockStatement(int layer)
+        {
+            var block = new BlockStatement();
+            var limit = countTab = CountTab();
+            while (countTab == limit && countTab > layer)
             {
-                var argument = ParseGroup(ParserGroup.ARRAY);
                 NextToken();
-                if (!ExpectPeek(Type.SEMICOLON))
+                if (curToken.type == Type.ERROR)
                 {
-                    if(curToken.type!=Type.SEMICOLON)_trace.Error($"'{token.literal}' missing ';'.");
+                    _tracer.Error(Code.Invalid, curToken.literal);
                     return null;
                 }
-                return new CallStatement(token, argument);
+
+                this.layer = countTab;
+                countTab = 0;
+                var statement = ParseStatement();
+                if (statement != null) block.Add(statement);
+
+                if (_tracer.error) return null;
+
+                if (curToken.type != Type.SEMICOLON)
+                    countTab += CountTab(limit);
+                else
+                    countTab = limit;
             }
-            else
-            {
-                _trace.Error($"Invalid expression '{peekToken.literal}'.");
-            }
-            return null;
+
+            if (block.statements.Count == 0) _tracer.Error(Code.MissingBlock);
+
+            this.layer = layer;
+            return block;
         }
 
         private IfStatement ParseIfStatement()
         {
-            var token = curToken;
+            _tracer.Trace("if");
+            var layer = this.layer;
+            var condition = ParseExpression(Type.COLON);
+            BlockStatement consequence = null;
 
-            if (!ExpectPeek(Type.LPAREN))
-            {
-                _trace.Error($"[if statement] Missing '('.");
-                return null;
-            }
-            var condition = ParseGroup();
-            if (condition == null)
-            {
-                if (peekToken.type == Type.RPAREN) _trace.Error($"[if statement] Invalid expression term ')'");
-                return null;
-            }
-            NextToken();
+            if (!ExpectPeek(Type.COLON))
+                _tracer.Error(Code.Missing, ":");
+            else if (!ExpectPeek(Type.EOL))
+                _tracer.Error(Code.MissingBlock);
+            else
+                consequence = ParseBlockStatement(layer);
 
-            if (!ExpectPeek(Type.LBRACE))
-            {
-                _trace.Error($"[if statement] Missing '{{'.");
-                return null;
-            }
-            var consequence = ParseBlockStatement();
-            if (consequence == null) return null;
+            if (_tracer.error) return null;
 
             Statement alternative = null;
-            if (ExpectPeek(Type.ELSE))
+            if (countTab == layer && ExpectPeek(Type.ELSE))
             {
-                if (ExpectPeek(Type.LBRACE))
-                    alternative = ParseBlockStatement();
+                _tracer.Trace("else");
+                if (!ExpectPeek(Type.COLON))
+                    _tracer.Error(Code.Missing, ":");
+                else if (!ExpectPeek(Type.EOL))
+                    _tracer.Error(Code.MissingBlock);
                 else if (ExpectPeek(Type.IF))
                     alternative = ParseIfStatement();
+                else
+                    alternative = ParseBlockStatement(layer);
 
-                if (alternative == null)
-                {
-                    _trace.Error($"[else statement] Missing '{{'.");
-                    return null;
-                }
+                if (_tracer.error) return null;
+                _tracer.UnTrace();
             }
 
-            return new IfStatement(curToken, condition, consequence, alternative);
+            _tracer.UnTrace();
+            return new IfStatement(condition, consequence, alternative);
         }
 
-        private WhileStatement ParseWhileStatement()
+        private LoopStatement ParseLoopStatement()
         {
-            var token = curToken;
-            if (!ExpectPeek(Type.LPAREN))
-            {
-                _trace.Error($"[while statement] Missing '('.");
-                return null;
-            }
-            var condition = ParseGroup();
-            if (condition == null)
-            {
-                if (peekToken.type == Type.RPAREN) _trace.Error($"[while statement] Invalid expression term ')'");
-                return null;
-            }
-            NextToken();
+            _tracer.Trace("loop");
+            var layer = this.layer;
+            var condition = ParseExpression(Type.COLON);
+            BlockStatement consequence = null;
 
-            if (!ExpectPeek(Type.LBRACE))
-            {
-                _trace.Error($"[while statement] Missing '{{'.");
-                return null;
-            }
-            var consequence = ParseBlockStatement();
-            if (consequence == null) return null;
-            return new WhileStatement(token, condition, consequence);
+            if (!ExpectPeek(Type.COLON))
+                _tracer.Error(Code.Missing, ":");
+            else if (!ExpectPeek(Type.EOL))
+                _tracer.Error(Code.MissingBlock,"AAA");
+            else
+                consequence = ParseBlockStatement(layer);
+
+            if (_tracer.error) return null;
+
+            _tracer.UnTrace();
+            return new LoopStatement(condition, consequence);
         }
 
-        private BlockStatement ParseBlockStatement()
+        private Array PasreArray(Type end = Type.RBRACKET)
         {
-            var block = new BlockStatement(curToken);
-            NextToken();
-            while (curToken.type != Type.RBRACE && curToken.type != Type.EOP)
+            Array output = new Array();
+            Expression value = null;
+
+            do
             {
-                var statement = ParseStatement();
-                if (statement == null) return null;
-                block.Add(statement);
+                value = ParseExpression(end, true);
+                output.Add(value);
                 NextToken();
-            }
-            if (curToken.type != Type.RBRACE)
-            {
-                _trace.Error($"Missing '}}'.");
-                return null;
-            }
+                if (_tracer.error) return null;
+            } while (curToken.type == Type.COMMA);
 
-            return block;
+            return output;
         }
 
-        private List<Token> ParseValue()
+        private Expression ParseExpression(Type end = Type.EOL, bool onComma = false)
         {
-            var output = new List<Token>();
-            var stack = new Stack<Token>();
 
-            var p1 = Priority(curToken.type);
-            var p2 = Priority(peekToken.type);
-            while (peekToken.type != Type.SEMICOLON && peekToken.type != Type.EOP)
+            Expression output = null;
+            Expression temp = null;
+            var p1 = 2;
+            var p2 = Priority(peekToken.type);//peekToken is next token after '=', '(' and '['
+
+            while (peekToken.type != end && peekToken.type != Type.EOL && peekToken.type != Type.EOP)
             {
                 if (VerifyState(p1, p2))
                 {
-                    if (p2 == 1)
-                        output.Add(peekToken);
-                    else if (p2 >= 3 && p2 <= 7)
+                    if (p2 == 8)
                     {
-                        while (stack.Count > 0 && p2 < Priority(stack.Peek().type))
-                            output.Add(stack.Pop());
-                        stack.Push(peekToken);
+                        NextToken();// curToken is '('
+                        temp = ParseExpression(Type.RPAREN);
+                        temp.SetPriority(10);
+                        p2 = 10;
                     }
-                    else if (p2 == 8)
+                    else if (p2 == 9)
                     {
-                        NextToken();
-                        var list = ParseGroup();
-                        if (list == null)
+                        if (curToken.type != Type.IDENT)
                         {
-                            if (peekToken.type == Type.RPAREN) _trace.Error($"Invalid expression term ')'");
-                            return null;
+                            _tracer.Error(Code.Invalid, $"{curToken.literal}?{peekToken.literal}");
+                            break;
                         }
-                        output.AddRange(list);
-                        p2 = 9;
+                        NextToken();// curToken is '('
+                        temp = ParseExpression(Type.RBRACKET);
+                        temp.SetPriority(0);
+                        p2 = 10;
                     }
+                    else
+                    {
+                        temp = new Expression(peekToken);
+                        temp.SetPriority(p2);
+                    }
+
+                    output = InsertExpression(output, temp);
+
                     NextToken();
+                    // Emergency break
+                    if (peekToken.type == Type.SEMICOLON) return output;
+                    if (onComma && peekToken.type == Type.COMMA) return output;
+
                     p1 = p2;
                     p2 = Priority(peekToken.type);
                 }
                 else
                 {
-                    _trace.Error($"Invalid expression '{curToken.literal} {peekToken.literal}'.");
-                    return null;
+                    _tracer.Error(Code.Invalid, $"{curToken.literal}?{peekToken.literal}");
+                    break;
                 }
             }
-            if (!ExpectPeek(Type.SEMICOLON))
-            {
-                _trace.Error($"Misssing ';'.");
-                return null;
-            }
 
-            while (stack.Count > 0)
-                output.Add(stack.Pop());
+            if (end != Type.EOL && peekToken.type != end)
+                _tracer.Error(Code.Missing);
 
-            if (output.Count > 0) return output;
-            _trace.Error($"Invalid expression term ';'");
-            return null;
+            if (output == null)
+                _tracer.Error(Code.Invalid, $"{curToken.literal}");
+
+            if (_tracer.error) return null;
+
+            return output;
         }
 
-        private List<Token> ParseGroup(ParserGroup parser=ParserGroup.GROUP)// 0=ParseGroup 1=PasreArgument
+        private Expression InsertExpression(Expression node, Expression newNode)
         {
-            var output = new List<Token>();
-            var stack = new Stack<Token>();
 
-            var p1 = Priority(curToken.type);
-            var p2 = Priority(peekToken.type);
-
-            while (peekToken.type != Type.RPAREN && peekToken.type != Type.EOP)
+            if (node == null)
+                return newNode;
+            else if (newNode.p == 0)
             {
-                if (parser == ParserGroup.ARRAY && peekToken.type == Type.COMMA)
-                {
-                    if (VerifyState(p1, 3))
-                    {
-                        while (stack.Count > 0)
-                            output.Add(stack.Pop());
-
-                        output.Add(peekToken);
-                        NextToken();
-                        p1 = 8;
-                        p2 = Priority(peekToken.type);
-                    }
-                }
-
-                if (VerifyState(p1, p2))
-                {
-                    if (p2 == 1)
-                        output.Add(peekToken);
-                    else if (p2 >= 3 && p2 <= 7)
-                    {
-                        while (stack.Count > 0 && p2 < Priority(stack.Peek().type))
-                            output.Add(stack.Pop());
-                        stack.Push(peekToken);
-                    }
-                    else if (p2 == 8)
-                    {
-                        NextToken();
-                        var list = ParseGroup(parser);
-                        if (list == null)
-                        {
-                            if (peekToken.type == Type.RPAREN) _trace.Error($"Invalid expression term ')'");
-                            return null;
-                        }
-                        output.AddRange(list);
-                    }
-                    NextToken();
-                    p1 = p2;
-                    p2 = Priority(peekToken.type);
-                }
+                if (node.p == 1)
+                    node.SetRight(newNode);
                 else
                 {
-                    _trace.Error($"Invalid expression '{curToken.literal}' '{peekToken.literal}'.");
-                    return null;
+                    InsertExpression(node.right, newNode);
                 }
             }
-            if (ExpectPeek(Type.EOP))
+            else if (node.p == 1 || newNode.p != 1 && node.p >= newNode.p)
             {
-                _trace.Error($"Misssing ')'.");
-                return null;
+                newNode.SetLeft(node);
+                return newNode;
             }
-
-            while (stack.Count > 0)
-                output.Add(stack.Pop());
-
-            if (output.Count > 0) return output;
-            return null;
+            else if (newNode.p == 1 || node.p != 1 && node.p < newNode.p)
+            {
+                if (node.right == null)
+                    node.SetRight(newNode);
+                else
+                {
+                    var temp = InsertExpression(node.right, newNode);
+                    node.SetRight(temp);
+                }
+            }
+            return node;
         }
 
         private int Priority(Type type)
@@ -335,8 +400,11 @@ namespace CodeRun
                     return 7;
                 case Type.LPAREN:
                     return 8;
-                case Type.RPAREN:
+                case Type.LBRACKET:
                     return 9;
+                case Type.RPAREN:
+                case Type.RBRACKET:
+                    return 10;
                 default:
                     return 0;
             }
@@ -344,19 +412,21 @@ namespace CodeRun
 
         private bool VerifyState(int p1, int p2)
         {
+            //4 5 6 = 3
             if (p1 >= 4 && p1 <= 6) p1 = 3;
             if (p2 >= 4 && p2 <= 6) p2 = 3;
 
             switch (p1)
             {
                 case 1:
-                case 9:
-                    if (p2 == 3 || p2 == 9) return true;
+                case 10:
+                    if (p2 == 3 || p2 == 9 || p2 == 10) return true;
                     return false;
                 case 2:
                 case 3:
                 case 7:
                 case 8:
+                case 9:
                     if (p2 == 1 || p2 == 7 || p2 == 8) return true;
                     return false;
                 case 0:
@@ -365,5 +435,11 @@ namespace CodeRun
             return false;
         }
 
+        private int CountTab(int tab = 0)
+        {
+            var i = 0;
+            while ((tab == 0 || i < tab) && ExpectPeek(Type.TAB)) i++;
+            return i;
+        }
     }
 }

@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Linq;
 
 namespace CodeRun
 {
@@ -7,6 +8,7 @@ namespace CodeRun
         public Type type { get; }
         public string typeName { get; }
         public double n { get; private set; }
+        public int i => (int)n;
         public string s { get; private set; }
         public bool b { get; private set; }
         public List<CodeObject> list { get; private set; }
@@ -72,6 +74,10 @@ namespace CodeRun
                 if (type == Type.ARRAY && list.Count > index) return list[index];
                 return null;
             }
+            set
+            {
+                if (type == Type.ARRAY && list.Count > index) list[index] = value;
+            }
         }
 
         public void Add(CodeObject obj)
@@ -109,6 +115,16 @@ namespace CodeRun
             Type.NUMBER => $"{n}",
             Type.STRING => s,
             Type.BOOLEAN => $"{b}",
+            Type.ARRAY => string.Join(" , ", list.Select(v => v.String)),
+            _ => null
+        };
+
+        public static CodeObject Convert(Token tok) => tok.type switch
+        {
+            Type.NUMBER => new CodeObject(double.Parse(tok.literal)),
+            Type.STRING => new CodeObject(tok.literal),
+            Type.TRUE => new CodeObject(true),
+            Type.FALSE => new CodeObject(false),
             _ => null
         };
     }
