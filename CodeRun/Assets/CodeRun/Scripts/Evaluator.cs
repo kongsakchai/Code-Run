@@ -6,10 +6,10 @@ namespace CodeRun
     public class Evaluator
     {
 
-        public bool end { private set; get; }
+        public bool end;
         private Environment env;
         private List<StructProgram> programs;
-        private int layer = 0;
+        private int index;
 
         public Evaluator(Environment env)
         {
@@ -23,7 +23,7 @@ namespace CodeRun
             {
                 case Program _p:
                     programs.Clear();
-                    layer = -1;
+                    index = -1;
                     EvalProgram(_p.statements);
                     break;
                 case BlockStatement _block:
@@ -49,31 +49,34 @@ namespace CodeRun
 
         public void NextStatement()
         {
-            var ok = programs[layer].Next();
+            if (_tracer.error) UnityEngine.Debug.Log($"{_tracer.code} {_tracer.GetLog()}");
+            var ok = programs[index].Next();
             if (ok)
             {
                 CurrentStatement();
             }
             else
             {
-                programs.RemoveAt(layer);
-                layer--;
-                if (layer >= 0) NextStatement();
+                programs.RemoveAt(index);
+                if (--index >= 0)
+                    NextStatement();
+                else
+                    end = true;
             }
         }
 
         public void CurrentStatement()
         {
-            if (layer < 0 || _tracer.error) return;
+            if (_tracer.error) return;
 
-            var statement = programs[layer].GetStatement();
+            var statement = programs[index].GetStatement();
             Eval(statement);
         }
 
         private void EvalProgram(List<Statement> statements)
         {
             programs.Add(new StructProgram(statements));
-            layer++;
+            index++;
             CurrentStatement();
         }
 
@@ -134,7 +137,7 @@ namespace CodeRun
             }
 
             CodeObject _array = (argument != null) ? Calculate(argument as Array) : null;
-            CodeObject _argument = (_array.Count == 1) ? _array[0] : _array;
+            CodeObject _argument = (_array != null && _array.Count == 1) ? _array[0] : _array;
             _tracer.UnTrace();
             func(_argument, NextStatement);
         }
@@ -171,12 +174,11 @@ namespace CodeRun
                 _tracer.Error(Code.Variable, $"{_condition.typeName}?index");
                 return;
             }
-            _tracer.UnTrace();
             try
             {
                 if (_condition.b)
                 {
-                    programs[layer].index--;
+                    programs[index].Previous();
                     EvalProgram(consequence.statements);
                 }
                 else
@@ -184,8 +186,9 @@ namespace CodeRun
             }
             catch
             {
+
             }
-            if(_tracer.error)UnityEngine.Debug.Log($"{_tracer.code} {_tracer.GetLog()}");
+            _tracer.UnTrace();
         }
 
         private CodeObject Calculate(Array value)
@@ -205,7 +208,7 @@ namespace CodeRun
 
         private CodeObject Calculate(Expression value)
         {
-            if (value == null)return null;
+            if (value == null) return null;
 
             if (value.token.type == Type.IDENT)
             {
@@ -241,7 +244,7 @@ namespace CodeRun
                 {
                     if (_right != null)
                         return CalculatePrefix(value.token.type, _right);
-                    
+
                     _tracer.Error(Code.Missing, "value");
                     return null;
                 }
@@ -349,31 +352,19 @@ namespace CodeRun
 
     class StructProgram
     {
-        public int count;
-        public int index;
+        private int count { get; }
+        private int index;
         private List<Statement> statements;
         public StructProgram(List<Statement> statements)
         {
             this.statements = statements;
-            count = statements.Count;
-            index = 0;
+            this.count = statements.Count;
+            this.index = 0;
         }
 
-        public Statement GetStatement()
-        {
-            if (index < count)
-            {
-                return statements[index];
-            }
-            return null;
-        }
-
-        public bool Next()
-        {
-            index++;
-            if (index < count) return true;
-            else return false;
-        }
+        public Statement GetStatement() => (index < count) ? statements[index] : null;
+        public bool Next() => (++index < count);
+        public void Previous() => index--;
     }
 
 }

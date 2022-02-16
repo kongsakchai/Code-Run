@@ -70,7 +70,7 @@ namespace CodeRun
             this.literal = literal;
         }
 
-        public override string ToString() => $"{type} : {literal}";
+        public override string ToString() => $"({type}){literal}";
     }
 
     public abstract class Node
@@ -94,7 +94,7 @@ namespace CodeRun
         {
             statements.Add(item);
         }
-        public string String => string.Join(" ", statements.Select(s => s.String));
+        public override string ToString() => string.Join("\n", statements.Select(s => s.ToString()));
     }
 
     public class Expression : NodeExpression
@@ -113,7 +113,25 @@ namespace CodeRun
         public void SetLeft(Expression left) => this.left = left;
         public void SetRight(Expression right) => this.right = right;
 
-        public override string ToString() => $"Token : {token.literal} | Priority : {p}";
+        public override string ToString()
+        {
+            if (left == null && right == null)
+            {
+                return token.ToString();
+            }
+            else if (left == null && right != null)
+            {
+                return $"{token.ToString()} {right.ToString()}";
+            }
+            else if (left != null && right == null)
+            {
+                return $"{left.ToString()} {token.ToString()}";
+            }
+            else
+            {
+                return $"{left.ToString()} {token.ToString()} {right.ToString()}";
+            }
+        }
     }
 
     public class Array : NodeExpression
@@ -143,12 +161,13 @@ namespace CodeRun
         }
 
         public override bool array => true;
+
+        public override string ToString() => $"[ {string.Join(" , ", list.Select(s => s.ToString()))} ]";
     }
 
     public abstract class Statement : Node
     {
         public Token token { get; protected set; }
-        public virtual string String { get => token.literal; }
     }
 
     public class BlockStatement : Statement
@@ -167,22 +186,32 @@ namespace CodeRun
         {
             statements.Add(item);
         }
-        public override string String => string.Join(" ", statements.Select(s => s.String));
+        public override string ToString() => $"Block >>\n{string.Join("\n", statements.Select(s => s.ToString()))}\n<< End";
     }
 
     public class AssignStatement : Statement
     {
         public string name { get; }
         public NodeExpression value { get; }
-        public Expression index { get;}
-        public AssignStatement(Token token, NodeExpression value,Expression index = null)
+        public Expression index { get; }
+        public AssignStatement(Token token, NodeExpression value, Expression index = null)
         {
             this.token = token;
             this.name = token.literal;
             this.value = value;
             this.index = index;
         }
-        //public override string String => $"{base.String} = {string.Join(" ", value.Select(s => s.literal))}";
+        public override string ToString()
+        {
+            if (index == null)
+            {
+                return $"name = {value.ToString()}";
+            }
+            else
+            {
+                return $"name [ {index.ToString()} ] = {value.ToString()}";
+            }
+        }
     }
 
     public class IfStatement : Statement
@@ -196,17 +225,7 @@ namespace CodeRun
             this.consequence = consequence;
             this.alternative = alternative;
         }
-        /*public override string String
-        {
-            get
-            {
-                var s = $"if {string.Join(" ", condition.Select(s => s.literal))} {{{consequence.String}}}";
-                if (alternative is null)
-                    return s;
-                else
-                    return $"{s} else {{{alternative.String}}}";
-            }
-        }*/
+        public override string ToString() => $"if statement {condition.ToString()} {consequence.ToString()} {alternative.ToString()}";
     }
 
     public class LoopStatement : Statement
@@ -218,7 +237,7 @@ namespace CodeRun
             this.condition = condition;
             this.consequence = consequence;
         }
-        //public override string String => $"while {string.Join(" ", condition.Select(s => s.literal))} {{{consequence.String}}}";
+        public override string ToString() => $"loop {condition.ToString()} {consequence.ToString()}";
     }
 
     public class CallStatement : Statement
@@ -231,7 +250,7 @@ namespace CodeRun
             this.name = token.literal;
             this.argument = argument;
         }
-        //public override string String => $"{base.String} ({string.Join(" ", argument.Select(s => s.literal))})";
+        public override string ToString() => $"{name} {argument.ToString()}";
     }
 
 }

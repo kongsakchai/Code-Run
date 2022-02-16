@@ -11,7 +11,7 @@ namespace CodeRun
         private Lexer lexer;
         private Parser parser;
         private Builtin builtin;
-        public void Awake()
+        public CodeComponent()
         {
             lexer = new Lexer();
             parser = new Parser(lexer);
@@ -24,14 +24,16 @@ namespace CodeRun
         {
             _tracer.Clear();
             env.ClearStore();
-
+            evaluation.end = false;
+            
             lexer.Read(source);
             var program = parser.ParseProgram();
             if (!_tracer.error)
                 evaluation.Eval(program);
 
-            if(_tracer.error)Debug.Log($"{_tracer.code} {_tracer.GetLog()}");
+            if (_tracer.error) Debug.Log($"{_tracer.code} {_tracer.GetLog()}");
         }
+        public bool end => _tracer.error || evaluation.end;
         public void Add(string name, CodeObject var, int layer) => env.Add(name, var);
         public void Add(string name, CodeObject var, int layer, Permission per) => env.Add(name, var, per);
         public void Add(string name, Action<CodeObject, Action> func) => env.Add(name, func);

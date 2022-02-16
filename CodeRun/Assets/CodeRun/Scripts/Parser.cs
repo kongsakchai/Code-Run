@@ -243,7 +243,7 @@ namespace CodeRun
             if (!ExpectPeek(Type.COLON))
                 _tracer.Error(Code.Missing, ":");
             else if (!ExpectPeek(Type.EOL))
-                _tracer.Error(Code.MissingBlock,"AAA");
+                _tracer.Error(Code.MissingBlock);
             else
                 consequence = ParseBlockStatement(layer);
 
